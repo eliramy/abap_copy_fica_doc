@@ -1,5 +1,5 @@
 # abap_copy_fica_doc
-ABAP Program to copy FICA doc
+My sophisticated ABAP Program to copy FICA doc
 
 1) Only see file: FKK_DOCUMENT_COMPLETE.txt
 How i did the enhancement why i needed to enhance the function
