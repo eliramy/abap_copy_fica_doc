@@ -12,3 +12,6 @@ That why there's program file: YCD_COPY_DOC.txt
 
 To fill the fields which aren't able to edit
 and transfer them to function FKK_DOCUMENT_COMPLETE.
+
+Finally Enjoy from this solution :)
+ 
