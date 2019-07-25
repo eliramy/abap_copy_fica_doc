@@ -1,0 +1,25 @@
+*&---------------------------------------------------------------------*
+*& Report  YCD_COPY_DOC                                                *
+*&---------------------------------------------------------------------*
+REPORT ycd_copy_doc LINE-SIZE 1023.
+
+INCLUDE ycd_copy_doc_top.
+INCLUDE ycd_copy_doc_sel.
+INCLUDE ycd_copy_doc_frm.
+
+START-OF-SELECTION.
+
+  PERFORM get_data
+              CHANGING
+                 gs_dfkkko
+                 gt_fkkop[]
+                 gt_fkkopk[]
+                 gv_err.
+
+  CHECK gv_err IS INITIAL.
+
+  PERFORM show_simulation
+                     CHANGING
+                        gs_dfkkko
+                        gt_fkkop
+                        gt_fkkopk.

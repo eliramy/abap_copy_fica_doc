@@ -1,0 +1,15 @@
+*&---------------------------------------------------------------------*
+*&  Include           YCD_COPY_DOC_SEL
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK blk1 WITH FRAME TITLE text-001 .
+
+PARAMETERS: p_opbel TYPE dfkkko-opbel OBLIGATORY,
+            p_blart TYPE dfkkko-blart OBLIGATORY,
+            p_waers TYPE dfkkko-waers OBLIGATORY,
+            p_bldat TYPE dfkkko-bldat OBLIGATORY,
+            p_budat TYPE dfkkko-budat OBLIGATORY,
+            p_faedn TYPE dfkkop-faedn,
+            p_opord TYPE dfkkko-opord,
+            p_fikey TYPE dfkkko-fikey.
+
+SELECTION-SCREEN END OF BLOCK blk1.

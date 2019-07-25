@@ -1,0 +1,197 @@
+FUNCTION FKK_DOCUMENT_COMPLETE.
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""$"$\SE:(1) Function Module FKK_DOCUMENT_COMPLETE, Start                                                                                                      A
+*$*$-Start: (1)---------------------------------------------------------------------------------$*$*
+ENHANCEMENT 1  YIM_FKK_DOCUMENT_COMPLETE.    "active version
+
+
+ IF SY-CPROG = 'YCD_COPY_DOC'.
+
+* Init and identify caller
+  CLEAR: CALLER.
+  CALLER-ID = 'SIMR'. " -> This ID open fields to edit.
+  PERFORM INIT_FPE1.
+  PERFORM INVTAB_FUELLEN.
+
+* globalize data
+  FKKPOSTC       = C_FKKPOSTC.
+  FKK_LATE_PAY   = I_LATE_PAY.
+  CALLER-OBJBEZ  = I_OBJBEZ.
+  CALLER-OBJBEZN = I_OBJBEZN.
+  IF FKKPOSTC-XOPBE = 'X'.
+    CALLER-RETURNDIR = 'X'.
+  ENDIF.
+  TFKKSEL[] = T_FKKSEL[].
+  FKKKO     = C_FKKKO.
+
+****** Additional customer code - fill Header screen structure *************
+  MOVE-CORRESPONDING FKKKO TO RFPE1.
+  RFPE1-WAERS_OP = FKKKO-waers.
+
+****** Additional customer code - fill Header screen structure *************
+
+
+* general init
+  PERFORM INIT_ALL.
+  OK-CODE = SPACE.
+
+* tax calculation automatic / at first = out of gl items
+  IF FKKPOSTC-XTAXC_AUTO NE SPACE.
+    RFPE1-XTAXC_MAN  = SPACE.
+    RFPE1-XTAXC_AUTO = FKKPOSTC-XTAXC_AUTO.
+  ENDIF.
+
+* init notice object
+  PERFORM NOTICE_OPEN.
+
+* take over data
+  REFRESH: T_FKKOPL.
+  LOOP AT T_FKKOP.
+    XFKKOP = T_FKKOP.
+    XFKKOP-OPUPK = SY-TABIX.
+    APPEND XFKKOP.
+  ENDLOOP.
+  DESCRIBE TABLE XFKKOP LINES CALLER-OPTFILL.
+  LOOP AT T_FKKOPK.
+    XFKKOPK = T_FKKOPK.
+    XFKKOPK-OPUPK = SY-TABIX.
+
+****** Change customer code *************
+    CLEAR XFKKOPK-OPBEL. "XFKKOPK-OPBEL = '*'.
+****** Change customer code *************
+    APPEND XFKKOPK.
+  ENDLOOP.
+  DESCRIBE TABLE XFKKOPK LINES CALLER-OPKTFILL.
+  XFKKCL[] = T_FKKCL[].
+  RFPE1-AUGRD = FKKPOSTC-AUGRD.
+
+* refresh memory of check functions (for repeated warnings)
+  CALL FUNCTION 'FKK_REFRESH_MEMORY'
+    EXPORTING
+      I_INTERNAL_TABLE = 'LM_MWSKZ'.
+
+* application set?
+  IF XAPPLK IS INITIAL.
+    MESSAGE E044.
+  ENDIF.
+
+* call DUMMY-Screen 99
+  CALL SCREEN 99.
+
+* set augrd
+  XFKKCL-AUGRD = RFPE1-AUGRD.
+  MODIFY XFKKCL TRANSPORTING AUGRD WHERE AUGRD = SPACE.
+
+* return data
+  C_FKKKO     = FKKKO.
+  C_FKKPOSTC  = FKKPOSTC.
+  T_FKKOP[]   = XFKKOP[].
+  T_FKKOPK[]  = XFKKOPK[].
+  T_FKKCL[]   = XFKKCL[].
+  T_ZAMTAB[]  = XZAMTAB[].
+  T_FKKOPL[]  = XFKKOPL[].
+  E_DIFFB     = DIFFB.
+  E_OKCOD     = CALLER-OKCOD.
+
+  EXIT.
+ENDIF.
+
+ENDENHANCEMENT.
+*$*$-End:   (1)---------------------------------------------------------------------------------$*$*
+*"----------------------------------------------------------------------
+*"*"Globale Schnittstelle:
+*"  IMPORTING
+*"     REFERENCE(I_OBJBEZ) TYPE  TXT20 DEFAULT SPACE
+*"     REFERENCE(I_OBJBEZN) TYPE  TXT20 DEFAULT SPACE
+*"     REFERENCE(I_LATE_PAY) TYPE  FKK_LATE_PAY OPTIONAL
+*"  EXPORTING
+*"     VALUE(E_OKCOD) LIKE  IEXCTAB-OKCOD
+*"     VALUE(E_DIFFB) LIKE  RFKB4-DIFFB
+*"  TABLES
+*"      T_FKKOP STRUCTURE  FKKOP OPTIONAL
+*"      T_FKKOPK STRUCTURE  FKKOPK OPTIONAL
+*"      T_FKKCL STRUCTURE  FKKCL OPTIONAL
+*"      T_EXCTAB STRUCTURE  IEXCTAB OPTIONAL
+*"      T_FKKSEL STRUCTURE  IFKKSEL OPTIONAL
+*"      T_ZAMTAB STRUCTURE  FKKBUPASEL OPTIONAL
+*"      T_FKKOPL STRUCTURE  FKKOPL OPTIONAL
+*"  CHANGING
+*"     VALUE(C_FKKKO) LIKE  FKKKO STRUCTURE  FKKKO
+*"     VALUE(C_FKKPOSTC) LIKE  FKKPOSTC STRUCTURE  FKKPOSTC
+*"----------------------------------------------------------------------
+
+* Init and identify caller
+  CLEAR: CALLER.
+  CALLER-ID = 'COMPLETE'.
+  PERFORM INIT_FPE1.
+  PERFORM INVTAB_FUELLEN.
+
+* globalize data
+  FKKPOSTC       = C_FKKPOSTC.
+  FKK_LATE_PAY   = I_LATE_PAY.
+  CALLER-OBJBEZ  = I_OBJBEZ.
+  CALLER-OBJBEZN = I_OBJBEZN.
+  IF FKKPOSTC-XOPBE = 'X'.
+    CALLER-RETURNDIR = 'X'.
+  ENDIF.
+  TFKKSEL[] = T_FKKSEL[].
+  FKKKO     = C_FKKKO.
+
+* general init
+  PERFORM INIT_ALL.
+  OK-CODE = SPACE.
+
+* tax calculation automatic / at first = out of gl items
+  IF FKKPOSTC-XTAXC_AUTO NE SPACE.
+    RFPE1-XTAXC_MAN  = SPACE.
+    RFPE1-XTAXC_AUTO = FKKPOSTC-XTAXC_AUTO.
+  ENDIF.
+
+* init notice object
+  PERFORM NOTICE_OPEN.
+
+* take over data
+  REFRESH: T_FKKOPL.
+  LOOP AT T_FKKOP.
+    XFKKOP = T_FKKOP.
+    XFKKOP-OPUPK = SY-TABIX.
+    APPEND XFKKOP.
+  ENDLOOP.
+  DESCRIBE TABLE XFKKOP LINES CALLER-OPTFILL.
+  LOOP AT T_FKKOPK.
+    XFKKOPK = T_FKKOPK.
+    XFKKOPK-OPUPK = SY-TABIX.
+    XFKKOPK-OPBEL = '*'.
+    APPEND XFKKOPK.
+  ENDLOOP.
+  DESCRIBE TABLE XFKKOPK LINES CALLER-OPKTFILL.
+  XFKKCL[] = T_FKKCL[].
+  RFPE1-AUGRD = FKKPOSTC-AUGRD.
+
+* refresh memory of check functions (for repeated warnings)
+  CALL FUNCTION 'FKK_REFRESH_MEMORY'
+    EXPORTING
+      I_INTERNAL_TABLE = 'LM_MWSKZ'.
+
+* application set?
+  IF XAPPLK IS INITIAL.
+    MESSAGE E044.
+  ENDIF.
+
+* call DUMMY-Screen 99
+  CALL SCREEN 99.
+
+* set augrd
+  XFKKCL-AUGRD = RFPE1-AUGRD.
+  MODIFY XFKKCL TRANSPORTING AUGRD WHERE AUGRD = SPACE.
+
+* return data
+  C_FKKKO     = FKKKO.
+  C_FKKPOSTC  = FKKPOSTC.
+  T_FKKOP[]   = XFKKOP[].
+  T_FKKOPK[]  = XFKKOPK[].
+  T_FKKCL[]   = XFKKCL[].
+  T_ZAMTAB[]  = XZAMTAB[].
+  T_FKKOPL[]  = XFKKOPL[].
+  E_DIFFB     = DIFFB.
+  E_OKCOD     = CALLER-OKCOD.
+ENDFUNCTION.

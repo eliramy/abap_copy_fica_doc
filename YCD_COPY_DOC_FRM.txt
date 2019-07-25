@@ -1,0 +1,463 @@
+*&---------------------------------------------------------------------*
+*&  Include           YCD_COPY_DOC_FRM
+*&---------------------------------------------------------------------*
+FORM get_data
+         CHANGING
+            ps_dfkkko   TYPE fkkko
+            pt_fkkop    TYPE tt_fkkop
+            pt_fkkopk   TYPE tt_fkkopk
+            pv_err     TYPE xfeld.
+
+  SELECT SINGLE *
+  INTO CORRESPONDING FIELDS OF ps_dfkkko
+  FROM dfkkko
+  WHERE opbel = p_opbel.
+
+  CASE sy-subrc.
+    WHEN '0'.
+
+* Get open items
+      SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE pt_fkkop
+      FROM dfkkop
+      WHERE opbel = p_opbel.
+
+* Check if there's any statistical item
+      FIELD-SYMBOLS
+      <fs_fkkop> TYPE fkkop.
+
+      DATA:
+*     lv_stakz TYPE tkkvhvtv-stakz,
+      lv_mess  TYPE string.
+
+      LOOP AT pt_fkkop ASSIGNING <fs_fkkop>
+                       WHERE stakz <> ''.
+
+        CONCATENATE text-006 p_opbel text-007 INTO lv_mess
+                                              SEPARATED BY space.
+        MESSAGE lv_mess TYPE 'I'.
+        pv_err = 'X'.
+        RETURN.
+
+      ENDLOOP.
+
+      SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE pt_fkkopk
+      FROM dfkkopk
+      WHERE opbel = p_opbel.
+
+    WHEN OTHERS.
+      MESSAGE text-005 TYPE 'I'.
+      pv_err = 'X'.
+
+  ENDCASE.
+
+ENDFORM.                    " GET_DATA
+*&---------------------------------------------------------------------*
+*&      Form  SHOW_SIMULATION
+*&---------------------------------------------------------------------*
+FORM show_simulation
+                CHANGING
+                   ps_dfkkko TYPE fkkko
+                   pt_fkkop  TYPE tt_fkkop
+                   pt_fkkopk TYPE tt_fkkopk.
+
+  CONSTANTS:
+  c_ils TYPE waers VALUE 'ILS'.
+
+  DATA:
+  ls_fkkpostc TYPE fkkpostc.
+
+  FIELD-SYMBOLS:
+  <fs_fkkop>  TYPE fkkop,
+  <fs_fkkopk> TYPE fkkopk.
+
+* Clear header fields
+  CLEAR:
+  ps_dfkkko-mandt,
+  ps_dfkkko-opbel,
+  ps_dfkkko-ernam,
+  ps_dfkkko-cpudt,
+  ps_dfkkko-cputm,
+* ps_dfkkko-stbel,
+* ps_dfkkko-stmet,
+  ps_dfkkko-storb.
+* ps_dfkkko-aginf.
+
+* Set header fields
+  IF p_opord IS NOT INITIAL.
+    ps_dfkkko-opord = p_opord.
+  ENDIF.
+
+* Get New FIKEY
+  PERFORM get_fikey
+               CHANGING
+                  ps_dfkkko-fikey.
+
+  ps_dfkkko-blart = p_blart.
+  ps_dfkkko-waers = p_waers.
+  ps_dfkkko-bldat = p_bldat.
+  ps_dfkkko-budat = p_budat.
+* ps_dfkkko-herkf = '01'. "Manual Posting
+
+  LOOP AT pt_fkkop ASSIGNING <fs_fkkop>.
+
+* Clear items fields
+    CLEAR:
+    <fs_fkkop>-mandt,
+    <fs_fkkop>-opbel,
+    <fs_fkkop>-augst,
+    <fs_fkkop>-augdt,
+    <fs_fkkop>-augbl,
+    <fs_fkkop>-augbd,
+    <fs_fkkop>-augrd,
+    <fs_fkkop>-augwa,
+    <fs_fkkop>-augbt,
+    <fs_fkkop>-augbs,
+    <fs_fkkop>-augsk,
+    <fs_fkkop>-augvd,
+    <fs_fkkop>-augob,
+    <fs_fkkop>-faedn,
+    <fs_fkkop>-pdtyp.
+
+* Set items fields
+    <fs_fkkop>-bldat = ps_dfkkko-bldat.
+    <fs_fkkop>-budat = ps_dfkkko-budat.
+    <fs_fkkop>-waers = ps_dfkkko-waers.
+
+    IF p_faedn IS NOT INITIAL.
+      <fs_fkkop>-faedn = p_faedn.
+    ENDIF.
+
+    IF p_opord IS NOT INITIAL.
+      <fs_fkkop>-opord = p_opord.
+    ENDIF.
+
+    CALL FUNCTION 'CONVERT_TO_LOCAL_CURRENCY'
+      EXPORTING
+        date             = ps_dfkkko-bldat
+        foreign_amount   = <fs_fkkop>-betrw
+        foreign_currency = ps_dfkkko-waers
+        local_currency   = c_ils
+      IMPORTING
+        exchange_rate    = <fs_fkkop>-kursf
+        local_amount     = <fs_fkkop>-betrh
+      EXCEPTIONS
+        no_rate_found    = 1
+        overflow         = 2
+        no_factors_found = 3
+        no_spread_found  = 4
+        derived_2_times  = 5
+        OTHERS           = 6.
+
+    IF sy-subrc <> 0.
+      MESSAGE i901(ycd).
+      RETURN.
+    ENDIF.
+
+* Change GL data
+    READ TABLE pt_fkkopk ASSIGNING <fs_fkkopk>
+                        WITH KEY opupk = <fs_fkkop>-opupk.
+    CHECK sy-subrc = 0.
+
+* Clear items fields
+    CLEAR:
+    <fs_fkkopk>-mandt,
+    <fs_fkkopk>-opbel.
+
+* Set item GL details
+    <fs_fkkopk>-fikey = ps_dfkkko-fikey.
+    SELECT SINGLE sgtxt INTO <fs_fkkopk>-sgtxt
+    FROM dfkkopkx
+    WHERE opbel = <fs_fkkopk>-opbel
+    AND   opupk = <fs_fkkopk>-opupk.
+
+* Adjust exchange rate values from item
+    <fs_fkkopk>-kursf = <fs_fkkop>-kursf.
+    <fs_fkkopk>-betrh = <fs_fkkop>-betrh * -1.
+
+  ENDLOOP.
+
+  CALL FUNCTION 'FKK_DOCUMENT_COMPLETE'
+    TABLES
+      t_fkkop    = pt_fkkop
+      t_fkkopk   = pt_fkkopk
+    CHANGING
+      c_fkkko    = ps_dfkkko
+      c_fkkpostc = ls_fkkpostc.
+
+ENDFORM.                    " SHOW_SIMULATION
+*&---------------------------------------------------------------------*
+*&      Form  MAPPING
+*&---------------------------------------------------------------------*
+FORM mapping  CHANGING ps_dfkkko TYPE fkkko
+                       pt_fkkop  TYPE tt_fkkop
+                       pt_fkkopk TYPE tt_fkkopk .
+
+  DATA: ls_ret                 LIKE bapiret2,
+        ls_documentheader      LIKE bapidfkkko,
+        ls_partnerpositions    LIKE bapidfkkop,
+        lt_partnerpositions    LIKE TABLE OF bapidfkkop,
+        ls_genledgerpositions  LIKE bapidfkkopk,
+        lt_genledgerpositions  LIKE TABLE OF bapidfkkopk ,
+        mtext                  TYPE string,
+        lv_doc_num             TYPE bapidfkkko-doc_no.
+
+  FIELD-SYMBOLS: <fs_fkkop>    TYPE fkkop,
+                 <fs_fkkopk>   TYPE fkkopk.
+
+*כותרת
+  ls_documentheader-doc_no          = ps_dfkkko-opbel.
+  ls_documentheader-fikey           = ps_dfkkko-fikey.
+  ls_documentheader-appl_area       = ps_dfkkko-applk.
+  ls_documentheader-doc_type        = ps_dfkkko-blart.
+  ls_documentheader-doc_source_key  = ps_dfkkko-herkf.
+  ls_documentheader-created_by      = ps_dfkkko-ernam.
+  ls_documentheader-entry_date      = ps_dfkkko-cpudt.
+  ls_documentheader-entry_time      = ps_dfkkko-cputm.
+  ls_documentheader-currency        = ps_dfkkko-waers.
+  ls_documentheader-doc_date        = ps_dfkkko-bldat.
+  ls_documentheader-post_date       = ps_dfkkko-budat.
+  ls_documentheader-trans_date      = ps_dfkkko-wwert.
+  ls_documentheader-ref_doc_no      = ps_dfkkko-xblnr.
+  ls_documentheader-return_reason   = ps_dfkkko-rlgrd.
+  ls_documentheader-single_doc      = ps_dfkkko-xeibh.
+  ls_documentheader-valuation_doc   = ps_dfkkko-xbwer.
+  ls_documentheader-clear_info      = ps_dfkkko-aginf.
+  ls_documentheader-tax_comp_code   = ps_dfkkko-stbuk.
+  ls_documentheader-reversed_doc    = ps_dfkkko-storb.
+  ls_documentheader-class_key       = ps_dfkkko-opord.
+
+*שורות מסמך
+  LOOP AT pt_fkkop ASSIGNING <fs_fkkop>.
+    CLEAR ls_partnerpositions.
+
+    ls_partnerpositions-doc_no      =  <fs_fkkop>-opbel.
+    ls_partnerpositions-rep_item    =  <fs_fkkop>-opupw.
+    ls_partnerpositions-item        =  <fs_fkkop>-opupk.
+    ls_partnerpositions-sub_item    =  <fs_fkkop>-opupz.
+    ls_partnerpositions-comp_code   =  <fs_fkkop>-bukrs.
+    ls_partnerpositions-bus_area    =  <fs_fkkop>-gsber.
+    ls_partnerpositions-buspartner  =  <fs_fkkop>-gpart.
+    ls_partnerpositions-contract    =  <fs_fkkop>-vtref.
+    ls_partnerpositions-cont_acct   =  <fs_fkkop>-vkont.
+    ls_partnerpositions-sub_doc     =  <fs_fkkop>-abwbl.
+    ls_partnerpositions-doc_cat     =  <fs_fkkop>-abwtp.
+    ls_partnerpositions-appl_area   =  <fs_fkkop>-applk.
+    ls_partnerpositions-main_trans  =  <fs_fkkop>-hvorg.
+    ls_partnerpositions-sub_trans   =  <fs_fkkop>-tvorg.
+    ls_partnerpositions-actdeterid  =  <fs_fkkop>-kofiz.
+    ls_partnerpositions-division    =  <fs_fkkop>-spart.
+    ls_partnerpositions-g_l_acct    =  <fs_fkkop>-hkont.
+    ls_partnerpositions-tax_code    =  <fs_fkkop>-mwskz.
+    ls_partnerpositions-down_pmnt   =  <fs_fkkop>-xanza.
+    ls_partnerpositions-stat_key    =  <fs_fkkop>-stakz.
+    ls_partnerpositions-doc_date    =  <fs_fkkop>-bldat.
+    ls_partnerpositions-post_date   =  <fs_fkkop>-budat.
+    ls_partnerpositions-text        =  <fs_fkkop>-optxt.
+    ls_partnerpositions-currency    =  <fs_fkkop>-waers.
+    ls_partnerpositions-net_date    =  <fs_fkkop>-faedn.
+    ls_partnerpositions-disc_due    =  <fs_fkkop>-faeds.
+    ls_partnerpositions-only_off    =  <fs_fkkop>-verkz.
+    ls_partnerpositions-deferral    =  <fs_fkkop>-studt.
+
+    ls_partnerpositions-disc_rate            =  <fs_fkkop>-sktpz.
+    ls_partnerpositions-no_dunning           =  <fs_fkkop>-xmanl.
+    ls_partnerpositions-tran_rate            =  <fs_fkkop>-kursf.
+    ls_partnerpositions-amount_loc_curr      =  <fs_fkkop>-betrh.
+    ls_partnerpositions-amount               =  <fs_fkkop>-betrw.
+    ls_partnerpositions-amount_par2_curr     =  <fs_fkkop>-betr2.
+    ls_partnerpositions-amount_par3_curr     =  <fs_fkkop>-betr3.
+    ls_partnerpositions-discount_base        =  <fs_fkkop>-skfbt.
+    ls_partnerpositions-tax_amount_loc_curr  =  <fs_fkkop>-sbeth.
+    ls_partnerpositions-tax_amount           =  <fs_fkkop>-sbetw.
+    ls_partnerpositions-tax_amount_par2_curr =  <fs_fkkop>-sbet2.
+    ls_partnerpositions-tax_amount_par3_curr =  <fs_fkkop>-sbet3.
+    ls_partnerpositions-tax_acct             =  <fs_fkkop>-mwsko.
+    ls_partnerpositions-offset_tax           =  <fs_fkkop>-mwvko.
+    ls_partnerpositions-pmnt_block           =  <fs_fkkop>-spzah.
+    ls_partnerpositions-pmnt_meth            =  <fs_fkkop>-pymet.
+    ls_partnerpositions-person_no            =  <fs_fkkop>-pernr.
+    ls_partnerpositions-grouping             =  <fs_fkkop>-grkey.
+    ls_partnerpositions-period_key           =  <fs_fkkop>-persl.
+    ls_partnerpositions-chg_block            =  <fs_fkkop>-xaesp.
+    ls_partnerpositions-cleardocno           =  <fs_fkkop>-augbl.
+    ls_partnerpositions-cl_postdte           =  <fs_fkkop>-augbd.
+    ls_partnerpositions-clear_reas           =  <fs_fkkop>-augrd.
+    ls_partnerpositions-clrg_curr            =  <fs_fkkop>-augwa.
+    ls_partnerpositions-amount_clear         =  <fs_fkkop>-augbt.
+    ls_partnerpositions-val_date             =  <fs_fkkop>-augvd.
+    ls_partnerpositions-canceled             =  <fs_fkkop>-augob.
+    ls_partnerpositions-no_reps              =  <fs_fkkop>-whang.
+    ls_partnerpositions-repet_grp            =  <fs_fkkop>-whgrp.
+    ls_partnerpositions-line_item            =  <fs_fkkop>-xeiph.
+    ls_partnerpositions-dunn_proc            =  <fs_fkkop>-mahnv.
+    ls_partnerpositions-dunn_block           =  <fs_fkkop>-mansp.
+    ls_partnerpositions-check_clng           =  <fs_fkkop>-xaugp.
+    ls_partnerpositions-plan_grp             =  <fs_fkkop>-fdgrp.
+    ls_partnerpositions-plan_level           =  <fs_fkkop>-fdlev.
+    ls_partnerpositions-cm_ex_days           =  <fs_fkkop>-fdztg.
+    ls_partnerpositions-amount_planned       =  <fs_fkkop>-fdwbt.
+    ls_partnerpositions-restrict             =  <fs_fkkop>-augrs.
+    ls_partnerpositions-paymnt_grp           =  <fs_fkkop>-pygrp.
+    ls_partnerpositions-int_block            =  <fs_fkkop>-sperz.
+    ls_partnerpositions-taxjurcode           =  <fs_fkkop>-txjcd.
+    ls_partnerpositions-tax_date             =  <fs_fkkop>-txdat.
+    ls_partnerpositions-trade_id             =  <fs_fkkop>-vbund.
+    ls_partnerpositions-acctasscat           =  <fs_fkkop>-kontt.
+    ls_partnerpositions-acct_assgt           =  <fs_fkkop>-kontl.
+    ls_partnerpositions-dun_indic            =  <fs_fkkop>-opsta.
+    ls_partnerpositions-doc_type             =  <fs_fkkop>-blart.
+    ls_partnerpositions-partner              =  <fs_fkkop>-emgpa.
+    ls_partnerpositions-bk_details           =  <fs_fkkop>-embvt.
+    ls_partnerpositions-addr_no              =  <fs_fkkop>-emadr.
+    ls_partnerpositions-int_key              =  <fs_fkkop>-ikey.
+    ls_partnerpositions-euro_stat            =  <fs_fkkop>-eurou.
+    ls_partnerpositions-reverseclg           =  <fs_fkkop>-xragl.
+    ls_partnerpositions-stat_key_src         =  <fs_fkkop>-astkz.
+    ls_partnerpositions-ref_doc_no           =  <fs_fkkop>-xblnr.
+    ls_partnerpositions-collection_pos       =  <fs_fkkop>-inkps.
+    ls_partnerpositions-w_tax_code           =  <fs_fkkop>-qsskz.
+    ls_partnerpositions-w_tax_suppl          =  <fs_fkkop>-qssew.
+    ls_partnerpositions-w_tax_licat          =  <fs_fkkop>-qsptp.
+    ls_partnerpositions-w_tax_base           =  <fs_fkkop>-qsshb.
+    ls_partnerpositions-w_tax_amount         =  <fs_fkkop>-qbshb.
+    ls_partnerpositions-exempt_no            =  <fs_fkkop>-qsznr.
+    ls_partnerpositions-reference_item       =  <fs_fkkop>-rfupk.
+    ls_partnerpositions-other_tax_code       =  <fs_fkkop>-strkz.
+    ls_partnerpositions-tax_category         =  <fs_fkkop>-fitpr.
+    ls_partnerpositions-crd_details          =  <fs_fkkop>-emcrd.
+    ls_partnerpositions-sub_application      =  <fs_fkkop>-subap.
+    ls_partnerpositions-currency_gl          =  <fs_fkkop>-pswsl.
+    ls_partnerpositions-amount_gl            =  <fs_fkkop>-pswbt.
+    ls_partnerpositions-tax_amount_gl        =  <fs_fkkop>-pswtx.
+    ls_partnerpositions-final_recipient      =  <fs_fkkop>-finre.
+    ls_partnerpositions-class_key            =  <fs_fkkop>-opord.
+
+    APPEND ls_partnerpositions TO lt_partnerpositions.
+
+  ENDLOOP.
+
+*שורות gl
+
+  LOOP AT pt_fkkopk ASSIGNING <fs_fkkopk>.
+    CLEAR ls_genledgerpositions.
+
+    ls_genledgerpositions-doc_no             =  <fs_fkkopk>-opbel.
+    ls_genledgerpositions-item               =  <fs_fkkopk>-opupk.
+    ls_genledgerpositions-comp_code          =  <fs_fkkopk>-bukrs.
+    ls_genledgerpositions-g_l_acct           =  <fs_fkkopk>-hkont.
+    ls_genledgerpositions-bus_area           =  <fs_fkkopk>-gsber.
+    ls_genledgerpositions-segment            =  <fs_fkkopk>-segment.
+    ls_genledgerpositions-profit_ctr         =  <fs_fkkopk>-prctr.
+    ls_genledgerpositions-costcenter         =  <fs_fkkopk>-kostl.
+    ls_genledgerpositions-sales_ord          =  <fs_fkkopk>-kdauf.
+    ls_genledgerpositions-s_ord_item         =  <fs_fkkopk>-kdpos.
+    ls_genledgerpositions-sched_line         =  <fs_fkkopk>-kdein.
+    ls_genledgerpositions-wbs_elem           =  <fs_fkkopk>-ps_psp_pnr.
+    ls_genledgerpositions-profit_segm_no     =  <fs_fkkopk>-paobjnr.
+    ls_genledgerpositions-plan_level         =  <fs_fkkopk>-fdlev.
+    ls_genledgerpositions-value_date         =  <fs_fkkopk>-valut.
+    ls_genledgerpositions-tran_rate          =  <fs_fkkopk>-kursf.
+    ls_genledgerpositions-amount_loc_curr    =  <fs_fkkopk>-betrh.
+    ls_genledgerpositions-amount             =  <fs_fkkopk>-betrw.
+    ls_genledgerpositions-amount_par2_curr   =  <fs_fkkopk>-betr2.
+    ls_genledgerpositions-amount_par3_curr   =  <fs_fkkopk>-betr3.
+    ls_genledgerpositions-repet_grp          =  <fs_fkkopk>-whgrp.
+    ls_genledgerpositions-other_tax_code     =  <fs_fkkopk>-strkz.
+    ls_genledgerpositions-w_tax_suppl        =  <fs_fkkopk>-qssew.
+    ls_genledgerpositions-tax_code           =  <fs_fkkopk>-mwskz.
+    ls_genledgerpositions-taxjurcode         =  <fs_fkkopk>-txjcd.
+    ls_genledgerpositions-taxjurcode_orig    =  <fs_fkkopk>-txjco.
+    ls_genledgerpositions-tax_level          =  <fs_fkkopk>-txcnt.
+    ls_genledgerpositions-tax_date           =  <fs_fkkopk>-txdat.
+    ls_genledgerpositions-tax_exception      =  <fs_fkkopk>-txexk.
+    ls_genledgerpositions-tax_base_loc_curr  =  <fs_fkkopk>-sbash.
+    ls_genledgerpositions-tax_base           =  <fs_fkkopk>-sbasw.
+    ls_genledgerpositions-tax_percent_rate   =  <fs_fkkopk>-stprz.
+    ls_genledgerpositions-cond_type          =  <fs_fkkopk>-kschl.
+    ls_genledgerpositions-orderid            =  <fs_fkkopk>-aufnr.
+    ls_genledgerpositions-line_item          =  <fs_fkkopk>-xeiph.
+    ls_genledgerpositions-trade_id           =  <fs_fkkopk>-vbund.
+    ls_genledgerpositions-acctasscat         =  <fs_fkkopk>-kontt.
+    ls_genledgerpositions-acct_assgt         =  <fs_fkkopk>-kontl.
+    ls_genledgerpositions-euro_stat          =  <fs_fkkopk>-eurou.
+    ls_genledgerpositions-fikey              =  <fs_fkkopk>-fikey.
+    ls_genledgerpositions-copa_updated       =  <fs_fkkopk>-xcopa.
+    ls_genledgerpositions-quantity           =  <fs_fkkopk>-menge.
+    ls_genledgerpositions-base_uom           =  <fs_fkkopk>-meins.
+    ls_genledgerpositions-region             =  <fs_fkkopk>-regio.
+    ls_genledgerpositions-county_cde         =  <fs_fkkopk>-counc.
+    ls_genledgerpositions-act_code_inc_tax   =  <fs_fkkopk>-gricd.
+    ls_genledgerpositions-distr_type_emp_tax =  <fs_fkkopk>-gityp.
+
+    APPEND ls_genledgerpositions TO lt_genledgerpositions.
+
+  ENDLOOP.
+
+  CALL FUNCTION 'BAPI_CTRACDOCUMENT_CREATE'
+    EXPORTING
+      testrun            = abap_false
+      documentheader     = ls_documentheader
+    IMPORTING
+      documentnumber     = lv_doc_num
+      return             = ls_ret
+    TABLES
+      partnerpositions   = lt_partnerpositions
+      genledgerpositions = lt_genledgerpositions.
+
+  IF sy-subrc <> 0.
+
+  ENDIF.
+
+  IF lv_doc_num IS NOT INITIAL.
+    WRITE: text-002, lv_doc_num.
+  ELSE.
+    MESSAGE ID     ls_ret-id
+            TYPE   ls_ret-type
+            NUMBER ls_ret-number
+            INTO   mtext
+            WITH   sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+    WRITE: text-003 , mtext.
+  ENDIF.
+
+ENDFORM.                    " MAPPING
+*&---------------------------------------------------------------------*
+*&      Form  GET_FIKEY
+*&---------------------------------------------------------------------*
+FORM get_fikey
+          CHANGING
+             pv_fikey TYPE dfkkko-fikey.
+
+* Get FIKEY
+  IF p_fikey IS INITIAL.
+    CALL FUNCTION 'FKK_SAMPLE_1113_USER'
+      EXPORTING
+        i_herkf = '01'
+        i_uname = sy-uname
+      IMPORTING
+        e_fikey = pv_fikey.
+
+  ELSE.
+    pv_fikey = p_fikey.
+  ENDIF.
+
+  CHECK pv_fikey IS NOT INITIAL.
+
+* Check Open
+  CALL FUNCTION 'FKK_FIKEY_CHECK'
+    EXPORTING
+      i_fikey      = pv_fikey
+    EXCEPTIONS
+      non_existing = 1
+      OTHERS       = 2.
+
+  CHECK sy-subrc <> 0.
+
+* Open FIKEY
+  CALL FUNCTION 'FKK_FIKEY_OPEN'
+    EXPORTING
+      i_fikey = pv_fikey.
+
+ENDFORM.                    " GET_FIKEY

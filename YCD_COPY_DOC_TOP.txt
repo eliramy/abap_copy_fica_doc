@@ -1,0 +1,11 @@
+*&---------------------------------------------------------------------*
+*&  Include           YCD_COPY_DOC_TOP
+*&---------------------------------------------------------------------
+TYPES: tt_fkkop  TYPE TABLE OF fkkop,
+       tt_fkkopk TYPE TABLE OF fkkopk.
+
+
+DATA: gs_dfkkko  TYPE fkkko,
+      gt_fkkop   TYPE tt_fkkop,
+      gt_fkkopk  TYPE tt_fkkopk,
+      gv_err     TYPE xfeld.
